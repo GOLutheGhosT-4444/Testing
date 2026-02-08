@@ -1,40 +1,30 @@
-name: Daily UPSC News Filter
-
+name: UPSC News Filter
 on:
   schedule:
-    - cron: '30 4 * * *'  # Daily ~10 AM IST
-  workflow_dispatch:  # Manual run
+    - cron: '0 5 * * *'  # 10:30 AM IST
+  workflow_dispatch:
 
 jobs:
-  filter-news:
+  run:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-      with:
-        token: ${{ secrets.REPO_TOKEN }}
     
-    - name: Set up Python
-      uses: actions/setup-python@v5
+    - uses: actions/setup-python@v5
       with:
-        python-version: '3.12'
+        python-version: '3.11'
     
-    - name: Install dependencies
+    - name: Install
       run: pip install -r requirements.txt
     
-    - name: Set env vars
-      run: |
-        echo "NEWSAPI_KEY=${{ secrets.NEWSAPI_KEY }}" >> $GITHUB_ENV
-        echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> $GITHUB_ENV
-        echo "GITHUB_REPOSITORY=${{ github.repository }}" >> $GITHUB_ENV
-        echo "REPO_TOKEN=${{ secrets.REPO_TOKEN }}" >> $GITHUB_ENV
-    
-    - name: Run script
+    - name: Run Filter
+      env:
+        NEWSAPI_KEY: ${{ secrets.NEWSAPI_KEY }}
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       run: python main.py
     
-    - name: Commit changes
-      run: |
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-        git add daily.txt
-        git diff --staged --quiet || git commit -m "Daily filtered news update"
-        git push
+    - name: Auto Commit
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        commit_message: "Daily news: {{ github.run_id }}"
+        file_pattern: daily.txt
