@@ -1,14 +1,10 @@
 import os
 import requests
 from datetime import datetime, timedelta
-import dateutil.parser
 import google.generativeai as genai
-import json
 
-# Keys from GitHub Secrets (env vars)
 NEWS_API_KEY = os.getenv('NEWSAPI_KEY')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-GITHUB_TOKEN = os.getenv('REPO_TOKEN')  # For pushing back to repo
 
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
@@ -18,48 +14,52 @@ def fetch_news():
     url = f'https://newsapi.org/v2/everything?q=india&from={yesterday}&sortBy=publishedAt&apiKey={NEWS_API_KEY}'
     response = requests.get(url)
     articles = response.json().get('articles', [])
-    return [a for a in articles if 'publishedAt' in a][:20]  # Top 20 recent
+    return [a for a in articles if 'publishedAt' in a][:10]
 
 def filter_with_gemini(news_items):
     filtered = []
-    prompt = """
-    Filter this news for Bank PO, SSC CGL, UPSC CSE students only. 
-    Keep ONLY relevant parts: Economy/Banking, Polity/Govt schemes, Environment/Science, International Relations, Social Issues.
-    Remove ALL irrelevant: Sports, Entertainment, Local crime (unless national impact), Celebrity news.
-    Output ONLY: Title: [short relevant title]
-    Summary: [1-2 sentences exam points]
-    Relevance: [Bank/SSC/UPSC tag]
-    
-    News: {news}
-    """
+    prompt = """Filter this news ONLY for Bank/SSC/UPSC students. Keep Economy, Polity, Environment, IR, Govt schemes. Remove Sports/Entertainment. Output format:
+Title: [title]
+Summary: [1 sentence exam point]
+Tag: [Bank/SSC/UPSC]
+
+News: {news}"""
     
     for item in news_items:
-        full_text = f"Title: {item['title']}
-Description: {item['description']}"
+        full_text = f"Title: {item.get('title', '')}
+Desc: {item.get('description', '')}"
         try:
             response = model.generate_content(prompt.format(news=full_text))
-            if response.text.strip():  # If relevant output
+            if "Title:" in response.text:
                 filtered.append(response.text.strip())
         except:
-            pass
+            continue
     return filtered
 
-def save_to_github(content):
-    # Commit to daily.txt in repo root
-    url = f"https://api.github.com/repos/{os.getenv('GITHUB_REPOSITORY')}/contents/daily.txt"
-    # First, get current file (or create)
-    # Use GitHub API to update - simplified, add full PUT logic if needed
-    with open('daily.txt', 'w') as f:
-        f.write(f"Filtered Current Affairs - {datetime.now().strftime('%Y-%m-%d')}
+def save_filtered_news(content):
+    timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
+    with open('daily.txt', 'w', encoding='utf-8') as f:
+        f.write(f"UPSC/SSC/Bank News - {timestamp}
+{'='*50}
 
 ")
-        f.write('
+        for item in content:
+            f.write(item + "
 
-'.join(content))
-    # In Actions, git add/commit/push will handle
+")
+    print(f"Saved {len(content)} filtered news items")
 
 if __name__ == "__main__":
+    if not all([NEWS_API_KEY, GEMINI_API_KEY]):
+        print("ERROR: API keys missing! Check GitHub Secrets.")
+        exit(1)
+    
+    print("Fetching news...")
     news = fetch_news()
-    filtered_news = filter_with_gemini(news)
-    save_to_github(filtered_news)
-    print("Filtered news saved to daily.txt")
+    print(f"Found {len(news)} articles")
+    
+    print("Filtering with Gemini AI...")
+    filtered = filter_with_gemini(news)
+    
+    print("Saving to daily.txt...")
+    save_filtered_news(filtered)
