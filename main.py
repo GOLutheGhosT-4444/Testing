@@ -6,8 +6,19 @@ import google.generativeai as genai
 NEWS_API_KEY = os.getenv('NEWSAPI_KEY')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+def get_gemini_model():
+    """API se available models list karke first model return karega"""
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        models = genai.list_models()
+        for model in models:
+            if 'generateContent' in model.supported_generation_methods:
+                print(f"Using model: {model.name}")
+                return genai.GenerativeModel(model.name)
+        return None
+    except Exception as e:
+        print(f"Model detection error: {e}")
+        return None
 
 def fetch_news():
     yesterday = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
@@ -16,9 +27,11 @@ def fetch_news():
     articles = response.json().get('articles', [])
     return [a for a in articles if 'publishedAt' in a][:10]
 
-def filter_with_gemini(news_items):
+def filter_with_gemini(model, news_items):
     filtered = []
-    prompt = """Filter this news ONLY for Bank/SSC/UPSC students. Keep Economy, Polity, Environment, IR, Govt schemes. Remove Sports/Entertainment. Output format:
+    prompt = """Filter this news ONLY for Bank/SSC/UPSC students. 
+Keep Economy, Polity, Environment, IR, Govt schemes. Remove Sports/Entertainment. 
+Output format:
 Title: [title]
 Summary: [1 sentence exam point]
 Tag: [Bank/SSC/UPSC]
@@ -54,12 +67,19 @@ if __name__ == "__main__":
         print("ERROR: API keys missing! Check GitHub Secrets.")
         exit(1)
     
+    print("Detecting Gemini model...")
+    model = get_gemini_model()
+    if not model:
+        print("ERROR: No Gemini model available!")
+        exit(1)
+    
     print("Fetching news...")
     news = fetch_news()
     print(f"Found {len(news)} articles")
     
     print("Filtering with Gemini AI...")
-    filtered = filter_with_gemini(news)
+    filtered = filter_with_gemini(model, news)
     
     print("Saving to daily.txt...")
     save_filtered_news(filtered)
+    print("Done!")
