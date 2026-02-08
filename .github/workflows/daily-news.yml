@@ -1,0 +1,40 @@
+name: Daily UPSC News Filter
+
+on:
+  schedule:
+    - cron: '30 4 * * *'  # Daily ~10 AM IST
+  workflow_dispatch:  # Manual run
+
+jobs:
+  filter-news:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.REPO_TOKEN }}
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+    
+    - name: Set env vars
+      run: |
+        echo "NEWSAPI_KEY=${{ secrets.NEWSAPI_KEY }}" >> $GITHUB_ENV
+        echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> $GITHUB_ENV
+        echo "GITHUB_REPOSITORY=${{ github.repository }}" >> $GITHUB_ENV
+        echo "REPO_TOKEN=${{ secrets.REPO_TOKEN }}" >> $GITHUB_ENV
+    
+    - name: Run script
+      run: python main.py
+    
+    - name: Commit changes
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add daily.txt
+        git diff --staged --quiet || git commit -m "Daily filtered news update"
+        git push
